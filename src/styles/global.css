@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+/* ---------- Design tokens (from original :root) ---------- */
+:root {
+  --bg: #0f1621;
+  --panel: #161f2e;
+  --panel2: #1c2637;
+  --line: #2a3547;
+  --text: #e6ebf2;
+  --sub: #8fa0b8;
+  --accent: #4f9ddb;
+  --accent2: #3a7cb8;
+  --on-accent: #0b1420;
+  --ok: #4caf7d;
+  --warn: #e0a940;
+  --danger: #e0645f;
+  --danger-line: #5a3230;
+  --disabled: #2a3547;
+
+  /* state badge colors */
+  --badge-open-bg: #2a3f57;      --badge-open-fg: #8ec4f5;
+  --badge-pending-bg: #4a3a1a;   --badge-pending-fg: var(--warn);
+  --badge-exec-bg: #22402f;      --badge-exec-fg: var(--ok);
+  --badge-closed-bg: #243046;    --badge-closed-fg: var(--sub);
+  --badge-cancel-bg: #402424;    --badge-cancel-fg: var(--danger);
+
+  --font-mono: ui-monospace, Menlo, Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel2: var(--panel2);
+  --color-line: var(--line);
+  --color-text: var(--text);
+  --color-sub: var(--sub);
+  --color-accent: var(--accent);
+  --color-accent2: var(--accent2);
+  --color-on-accent: var(--on-accent);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-danger-line: var(--danger-line);
+  --color-disabled: var(--disabled);
+  --font-mono: var(--font-mono);
+  --font-sans: var(--font-sans);
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-sans); }
+  #root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+}
+
+/* ---------- Reusable component classes ---------- */
+@layer components {
+  .chip { @apply text-[11.5px] px-2.5 py-[5px] rounded-full border border-line bg-transparent text-sub cursor-pointer; }
+  .chip-active { @apply bg-accent border-accent text-on-accent font-semibold; }
+
+  .tab { @apply px-3.5 py-[7px] rounded-md border border-transparent bg-transparent text-sub text-[13px] cursor-pointer font-semibold; }
+  .tab-active { @apply bg-panel2 text-text border-line; }
+
+  .btn { @apply px-4 py-[9px] rounded-md border border-line bg-panel2 text-text text-[13px] cursor-pointer font-semibold; }
+  .btn-primary { @apply bg-accent border-accent text-on-accent disabled:bg-disabled disabled:border-disabled disabled:text-sub disabled:cursor-not-allowed; }
+  .btn-ghost { @apply bg-transparent; }
+  .btn-sm { @apply px-3 py-1.5; }
+
+  .mini-btn { @apply bg-transparent border border-line text-sub rounded-[5px] px-[9px] py-[3px] text-[11px] cursor-pointer; }
+
+  .field { @apply bg-panel2 border border-line text-text px-2.5 py-[7px] rounded-md text-[13px] w-full; }
+
+  .section-title { @apply text-xs uppercase tracking-[.5px] text-sub mb-2.5 font-semibold; }
+  .hint { @apply text-xs text-sub mt-1.5; }
+  .row { @apply flex justify-between items-center py-2.5 border-b border-line text-[13px]; }
+
+  .badge { @apply text-[10.5px] px-[7px] py-0.5 rounded font-semibold uppercase tracking-[.3px]; }
+  .badge-Open { background: var(--badge-open-bg); color: var(--badge-open-fg); }
+  .badge-Pending { background: var(--badge-pending-bg); color: var(--badge-pending-fg); }
+  .badge-Execution { background: var(--badge-exec-bg); color: var(--badge-exec-fg); }
+  .badge-Closed { background: var(--badge-closed-bg); color: var(--badge-closed-fg); }
+  .badge-Cancelled { background: var(--badge-cancel-bg); color: var(--badge-cancel-fg); }
+}
