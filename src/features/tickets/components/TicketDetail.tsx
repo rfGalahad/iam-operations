@@ -1,95 +1,134 @@
-import { CANCEL_REASONS, PENDING_REASONS } from "../constants";
-import type { Ticket } from "../types";
-import { Badge } from "./Badge";
+import { Button, Field, Section, Select, TextArea, TextInput } from "@/components/ui/index";
+import { PRIORITIES, STATUSES } from "../constants";
+import type { Application } from "@/features/applications/types";
+import type { Spiel } from "@/features/spiels/types";
+import type { Ticket, TicketActions } from "../types";
+import { progress } from "../utils";
+import { AccountsTable } from "./AccountsTable";
+import { Checklist } from "./Checklist";
+import { SidePanel } from "./SidePanel";
 
 interface Props {
-  ticket: Ticket | undefined;
-  onToggleCheck: (idx: number) => void;
-  onExecute: () => void;
-  onPending: (reason: string) => void;
-  onResume: () => void;
-  onCancel: (reason: string) => void;
-  onComplete: () => void;
+  ticket?: Ticket;
+  app?: Application;
+  spiels: Spiel[];
+  subOptions: string[];
+  actions: TicketActions;
+  onUseSpiel: (id: string) => void;
+  onPasteAccounts: () => void;
+  onCopy: (text: string, msg: string) => void;
 }
 
-function ReasonSelect({ title, options, onPick }: { title: string; options: string[]; onPick: (r: string) => void }) {
-  return (
-    <div className="mt-2.5">
-      <h3 className="section-title">{title}</h3>
-      <select className="field" defaultValue="" onChange={e => e.target.value && onPick(e.target.value)}>
-        <option value="" disabled>Choose reason…</option>
-        {options.map(r => <option key={r} value={r}>{r}</option>)}
-      </select>
-    </div>
-  );
-}
+export const TicketDetail = ({ 
+  ticket, 
+  app, 
+  spiels, 
+  subOptions, 
+  actions, 
+  onUseSpiel, 
+  onPasteAccounts, 
+  onCopy 
+}: Props) => {
 
-export function TicketDetail({ 
-  ticket: t, 
-  onToggleCheck, 
-  onExecute, 
-  onPending, 
-  onResume, 
-  onCancel, 
-  onComplete 
-}: Props) {
+  if (!ticket) {
+    return (
+      <div className="rounded-[10px] border border-line bg-panel p-7 text-center text-sub">
+        Select a ticket to see its checklist and support details.
+      </div>
+    );
+  }
 
-  if (!t) return <div className="flex-1 p-10 text-sm text-sub">Select a ticket.</div>;
-
-  const done = t.checklist.filter(c => c.checked).length;
-  const allChecked = t.checklist.every(c => c.checked);
-  const validating = t.state === "Open" || t.state === "Pending";
+  const { done, total, pct } = progress(ticket);
 
   return (
-    <div className="flex-1 overflow-y-auto px-7 py-6 max-w-full md:max-w-[640px]">
-      <h2 className="m-0 mb-0.5 text-lg">{t.application} — {t.category}</h2>
-      <div className="font-mono text-[12.5px] text-sub">{t.number} · {t.sub} · <Badge state={t.state} /></div>
+    <div className="rounded-[10px] border border-line bg-panel p-4">
+      <h2 className="mb-0.5 text-lg font-semibold">
+        <span className="font-mono">{ticket.no}</span>: {ticket.sum}
+      </h2>
+      <div className="flex flex-wrap gap-2.5 text-xs text-sub">
+        <span>{app?.name ?? "(deleted app)"}</span>
+        <span>{ticket.cat}</span>
+        <span>Requester: {ticket.req}</span>
+      </div>
 
-      {validating && (
-        <section className="mt-[22px]">
-          <h3 className="section-title">Validation Checklist</h3>
-          <div className="h-1.5 bg-panel2 rounded-[3px] overflow-hidden mt-2 mb-1">
-            <div className="h-full bg-accent transition-[width] duration-200" style={{ width: `${(100 * done) / t.checklist.length}%` }} />
+      <div className="my-3.5 grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5">
+        <Field label="Status">
+          <Select 
+            value={ticket.status} 
+            onChange={e => actions.update("status", e.target.value as Ticket["status"])}
+          >
+            {STATUSES.map(s => <option key={s}>{s}</option>)}
+          </Select>
+        </Field>
+        <Field label="Priority">
+          <Select value={ticket.pri} onChange={e => actions.update("pri", e.target.value as Ticket["pri"])}>
+            {PRIORITIES.map(p => <option key={p}>{p}</option>)}
+          </Select>
+        </Field>
+        <Field label="SCTask number">
+          <TextInput className="font-mono" value={ticket.sc} onChange={e => actions.update("sc", e.target.value)} />
+        </Field>
+        <Field label="Sub-category">
+          <TextInput list="subs" value={ticket.sub} onChange={e => actions.update("sub", e.target.value)} />
+          <datalist id="subs">{subOptions.map(s => <option key={s} value={s} />)}</datalist>
+        </Field>
+      </div>
+
+      {ticket.status === "Pending" && (
+        <div className="mb-2.5">
+          <Field label="Pending on">
+            <TextInput
+              placeholder="Who or what are you waiting for?"
+              value={ticket.pend}
+              onChange={e => actions.update("pend", e.target.value)}
+            />
+          </Field>
+        </div>
+      )}
+
+      <div className="grid gap-4.5 min-[1001px]:grid-cols-[1fr_300px]">
+        <div>
+          <Section title={`Checklist (${done}/${total}, ${pct}%)`}>
+            <Checklist 
+              items={ticket.checks} 
+              onToggle={actions.toggleCheck} 
+              onRemove={actions.removeCheck} 
+              onAdd={actions.addCheck} 
+            />
+          </Section>
+
+          <Section title={`Accounts (${ticket.accts.length})`}>
+            <AccountsTable
+              accounts={ticket.accts}
+              onAdd={actions.addAccount}
+              onPaste={onPasteAccounts}
+              onChange={actions.updateAccount}
+              onRemove={actions.removeAccount}
+            />
+          </Section>
+
+          <Section title="Notes">
+            <TextArea
+              placeholder="Work notes, evidence links, account IDs"
+              value={ticket.notes}
+              onChange={e => actions.update("notes", e.target.value)}
+            />
+          </Section>
+
+          <div className="mt-3.5 flex gap-2">
+            <Button size="sm" onClick={actions.resetChecklist}>Reload checklist from template</Button>
+            <Button size="sm" variant="danger" onClick={actions.remove}>Delete ticket</Button>
           </div>
-          <div className="text-[11.5px] text-sub">{done} of {t.checklist.length} complete</div>
-          {t.checklist.map((c, i) => (
-            <div key={i} className="flex items-start gap-2.5 py-[9px] border-b border-line">
-              <input type="checkbox" id={`c${i}`} checked={c.checked} onChange={() => onToggleCheck(i)} className="mt-0.5 size-4 accent-accent" />
-              <label htmlFor={`c${i}`} className="text-[13.5px] leading-snug">{c.label}</label>
-            </div>
-          ))}
-          <div className="mt-[18px]">
-            <button className="btn btn-primary" disabled={!allChecked} onClick={onExecute}>
-              {allChecked ? "Move to Execution" : "Complete checklist to proceed"}
-            </button>
-          </div>
-          <ReasonSelect title="Set Pending" options={PENDING_REASONS} onPick={onPending} />
-          <ReasonSelect title="Cancel Ticket" options={CANCEL_REASONS} onPick={onCancel} />
-        </section>
-      )}
+        </div>
 
-      {t.state === "Pending" && (
-        <section className="mt-[22px]">
-          <h3 className="section-title">Pending Status</h3>
-          <div className="hint">Reason: {t.pendingReason}. Follow up, then resume validation once resolved.</div>
-          <div className="mt-[18px]"><button className="btn" onClick={onResume}>Resume Validation</button></div>
-        </section>
-      )}
-
-      {t.state === "Execution" && (
-        <section className="mt-[22px]">
-          <h3 className="section-title">Execution</h3>
-          <div className="hint">All validations were confirmed before entering this stage. Pending/Cancel are locked here — execute the request in the target application, then mark complete.</div>
-          <div className="mt-[18px]"><button className="btn btn-primary" onClick={onComplete}>Mark Complete</button></div>
-        </section>
-      )}
-
-      {(t.state === "Closed" || t.state === "Cancelled") && (
-        <section className="mt-[22px]">
-          <h3 className="section-title">{t.state}</h3>
-          <div className="hint">This ticket is finalized and logged below.</div>
-        </section>
-      )}
+        <SidePanel 
+          app={app} 
+          ticket={ticket} 
+          spiels={spiels} 
+          onCopy={onCopy} 
+          onUseSpiel={onUseSpiel} 
+        />
+      </div>
     </div>
   );
 }

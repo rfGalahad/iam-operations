@@ -1,56 +1,91 @@
-import { useState } from "react";
-
-import type { NewTicketDraft, StateFilter, Ticket } from "../types";
-import { STATE_FILTERS } from "../constants";
-
-import { Badge } from "./Badge";
-import { NewTicketForm } from "./NewTicketForm";
+import { Button, Chip, TextInput } from "@/components/ui/index";
+import { FILTERS } from "../constants";
+import type { Filter, Ticket } from "../types";
+import { progress } from "../utils";
+import { StatusBadge } from "./StatusBadge";
 
 interface Props {
   tickets: Ticket[];
-  applicationNames: string[];
-  selectedId: number | null;
-  filter: StateFilter;
-  onFilter: (f: StateFilter) => void;
-  onSelect: (id: number) => void;
-  onCreate: (draft: NewTicketDraft) => void;
+  counts: { open: number; pending: number; execution: number };
+  appName: (id: string) => string;
+  selectedId: string | null;
+  filter: Filter;
+  query: string;
+  onQuery: (q: string) => void;
+  onFilter: (f: Filter) => void;
+  onSelect: (id: string) => void;
+  onNew: () => void;
+  onImport: () => void;
 }
 
-export function TicketList({ tickets, applicationNames, selectedId, filter, onFilter, onSelect, onCreate }: Props) {
-  const [showNew, setShowNew] = useState(false);
+const tools = "flex flex-wrap gap-1.5 border-b border-line p-2.5";
 
+export function TicketList(prop: Props) {
   return (
-    <div className="w-full md:w-95 md:min-w-[280px] max-h-[40vh] md:max-h-none border-b md:border-b-0 md:border-r border-line overflow-y-auto bg-panel">
-      <div className="sticky top-0 z-[1] flex flex-wrap gap-1.5 p-2.5 border-b border-line bg-panel">
-        {STATE_FILTERS.map(f => (
-          <button key={f} className={`chip ${filter === f ? "chip-active" : ""}`} onClick={() => onFilter(f)}>{f}</button>
+    <div className="rounded-[10px] border border-line bg-panel">
+      <div className={tools}>
+        <TextInput
+          placeholder="Search ticket, app, requester"
+          value={prop.query}
+          onChange={e => prop.onQuery(e.target.value)}
+        />
+      </div>
+      <div className={tools}>
+        {FILTERS.map(filter => (
+          <Chip 
+            key={filter} 
+            active={filter === prop.filter} 
+            onClick={() => prop.onFilter(filter)}
+          >
+            {filter}
+          </Chip>
         ))}
-        <button className="chip chip-active ml-auto" onClick={() => setShowNew(s => !s)}>+ Add Ticket</button>
+      </div>
+      <div className={`${tools} items-center justify-between`}>
+        <span className="flex gap-1.5">
+          <Button size="sm" onClick={prop.onImport}>
+            Import tickets
+          </Button>
+          <Button size="sm" variant="primary" onClick={prop.onNew}>
+            New ticket
+          </Button>
+        </span>
       </div>
 
-      {showNew && (
-        <NewTicketForm
-          applicationNames={applicationNames}
-          onCreate={d => { onCreate(d); setShowNew(false); }}
-          onCancel={() => setShowNew(false)}
-        />
-      )}
-
-      {tickets.map(t => (
-        <div key={t.id} onClick={() => onSelect(t.id)}
-          className={`px-3.5 py-3 border-b border-line cursor-pointer hover:bg-panel2 ${t.id === selectedId ? "bg-panel2 border-l-[3px] border-l-accent" : ""}`}>
-          <div className="flex justify-between items-center mb-1">
-            <span className="font-mono text-[12.5px] text-sub">{t.number}</span>
-            <Badge state={t.state} />
-          </div>
-          <div className="text-[13.5px] font-semibold">{t.application}</div>
-          <div className="text-xs text-sub mt-0.5">{t.category} · {t.sub}</div>
-          {t.state === "Pending" && (
-            <div className="text-[11px] text-danger mt-1">{t.pendingReason} · day {t.days}{t.days >= 3 ? " — 3-STRIKE" : ""}</div>
-          )}
+      {prop.tickets.map(t => {
+        const { done, total, pct } = progress(t);
+        const sel = t.id === prop.selectedId;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            aria-current={sel}
+            onClick={() => prop.onSelect(t.id)}
+            className={`block w-full cursor-pointer border-b border-l-[3px] border-b-line px-3 py-2.5 text-left last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
+              sel ? "border-l-accent bg-panel2" : "border-l-transparent"
+            }`}
+          >
+            <div className="flex items-center gap-1.5">
+              <b className="font-mono font-semibold">{t.no}</b>
+              <StatusBadge status={t.status} />
+            </div>
+            <div>{t.sum}</div>
+            <div className="mt-0.5 flex flex-wrap gap-2.5 text-xs text-sub">
+              <span>{prop.appName(t.appId)}</span>
+              <span>{t.cat}</span>
+              <span>{done}/{total}</span>
+            </div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-sm bg-panel2">
+              <div className="h-full bg-ok" style={{ width: `${pct}%` }} />
+            </div>
+          </button>
+        );
+      })}
+      {prop.tickets.length === 0 && (
+        <div className="p-7 text-center text-sub">
+          No tickets match. Add one with New ticket.
         </div>
-      ))}
-      {tickets.length === 0 && <div className="p-10 text-sm text-sub">No tickets in this view.</div>}
+      )}
     </div>
   );
 }

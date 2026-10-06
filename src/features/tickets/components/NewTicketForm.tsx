@@ -1,32 +1,86 @@
-import { useState } from "react";
-import { TEMPLATES } from "../constants";
-import type { NewTicketDraft, TicketCategory } from "../types";
+import { useState, type ChangeEvent, type FormEvent } from "react";
+import { Button, DialogActions, Field, Hint, Select, TextInput } from "@/components/ui/index";
+import { CATEGORIES, PRIORITIES } from "../constants";
 
-interface Props { applicationNames: string[]; onCreate: (d: NewTicketDraft) => void; onCancel: () => void }
+import type { Application } from "@/features/applications/types";
+import type { NewTicketDraft } from "../types";
 
-const blank: NewTicketDraft = { number: "", application: "", category: "Creation", sub: "" };
+interface Props { 
+  apps: Application[]; 
+  onCreate: (d: NewTicketDraft) => void; 
+  onCancel: () => void 
+}
 
-export function NewTicketForm({ applicationNames, onCreate, onCancel }: Props) {
-  const [draft, setDraft] = useState<NewTicketDraft>(blank);
-  const submit = () => {
-    if (!draft.number.trim() || !draft.application) return;
-    onCreate(draft);
+export const NewTicketForm = ({ 
+  apps, 
+  onCreate, 
+  onCancel 
+}: Props) => {
+
+  const [d, setD] = useState<NewTicketDraft>({
+    no: "", 
+    sum: "", 
+    appId: apps[0]?.id ?? "", 
+    cat: CATEGORIES[0], 
+    sc: "", 
+    sub: "", 
+    req: "", 
+    pri: "Medium",
+  });
+  const [error, setError] = useState("");
+
+  const bind = (k: keyof NewTicketDraft) => ({
+    value: d[k],
+    onChange: (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setD(p => ({ ...p, [k]: e.target.value })),
+  });
+
+  if (!apps.length) {
+    return (
+      <>
+        <Hint>Add an application first.</Hint>
+        <DialogActions><Button onClick={onCancel}>Close</Button></DialogActions>
+      </>
+    );
+  }
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const v = { ...d, no: d.no.trim(), sum: d.sum.trim(), sc: d.sc.trim(), sub: d.sub.trim(), req: d.req.trim() };
+    if (!v.no || !v.sum) return setError("Ticket number and summary are required.");
+    onCreate(v);
   };
+
+  const grid = "grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5";
+
   return (
-    <div className="flex flex-col gap-2 px-3.5 py-3 border-b border-line">
-      <input className="field" placeholder="Ticket number (INC...)" value={draft.number} onChange={e => setDraft(d => ({ ...d, number: e.target.value }))} />
-      <select className="field" value={draft.application} onChange={e => setDraft(d => ({ ...d, application: e.target.value }))}>
-        <option value="">Select application…</option>
-        {applicationNames.map(n => <option key={n} value={n}>{n}</option>)}
-      </select>
-      <select className="field" value={draft.category} onChange={e => setDraft(d => ({ ...d, category: e.target.value as TicketCategory }))}>
-        {Object.keys(TEMPLATES).map(c => <option key={c} value={c}>{c}</option>)}
-      </select>
-      <input className="field" placeholder="Sub-category (e.g. New Hire)" value={draft.sub} onChange={e => setDraft(d => ({ ...d, sub: e.target.value }))} />
-      <div className="flex gap-2.5">
-        <button className="btn btn-primary" onClick={submit}>Create</button>
-        <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+    <form onSubmit={submit} className="space-y-2.5">
+      <Field label="Ticket number"><TextInput autoFocus placeholder="RITM0000000" {...bind("no")} /></Field>
+      <Field label="Summary"><TextInput {...bind("sum")} /></Field>
+      <div className={grid}>
+        <Field label="Application">
+          <Select {...bind("appId")}>{apps.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</Select>
+        </Field>
+        <Field label="Category">
+          <Select {...bind("cat")}>{CATEGORIES.map(c => <option key={c}>{c}</option>)}</Select>
+        </Field>
       </div>
-    </div>
+      <div className={grid}>
+        <Field label="SCTask number"><TextInput {...bind("sc")} /></Field>
+        <Field label="Sub-category"><TextInput {...bind("sub")} /></Field>
+      </div>
+      <div className={grid}>
+        <Field label="Requester"><TextInput {...bind("req")} /></Field>
+        <Field label="Priority">
+          <Select {...bind("pri")}>{PRIORITIES.map(p => <option key={p}>{p}</option>)}</Select>
+        </Field>
+      </div>
+      <Hint>The checklist is copied from the application's template for this category.</Hint>
+      {error && <div role="alert" className="text-xs text-danger">{error}</div>}
+      <DialogActions>
+        <Button onClick={onCancel}>Cancel</Button>
+        <Button type="submit" variant="primary">Create ticket</Button>
+      </DialogActions>
+    </form>
   );
 }

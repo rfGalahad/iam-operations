@@ -11,13 +11,6 @@ export const blankCategories = (): ProcessCategory[] => [
 
 export const emptyApplication = (name: string): Application => ({
   name,
-  env: "Production",
-  url: "",
-  username: "",
-  password: "",
-  notes: "",
-  dos: [],
-  donts: [],
   categories: blankCategories(),
-  support: [],
+  contacts: [],
 });

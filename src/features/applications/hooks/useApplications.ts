@@ -1,72 +1,42 @@
 import { useState } from "react";
+import { usePersistentState } from "@/hooks/usePersistentState";
+import { uid } from "@/lib/id";
+import type { Application, ApplicationDraft } from "../types";
 
-import { usePersistentState } from "../../../hooks/usePersistentState";
+export const APPLICATIONS_KEY = "iam_desk_applications";
 
-import { APPS_KEY, DEFAULT_CATEGORY, emptyApplication } from "../constants";
-import { sampleApplications } from "../sampleApplications";
-import type { Application, SupportContact } from "../types";
-
+// null = closed, { applicationId: null } = adding, { applicationId: "x" } = editing
+type Editor = null | { applicationId: string | null };
 
 export function useApplications() {
+  const [apps, setApps] = usePersistentState<Application[]>(APPLICATIONS_KEY, []);
+  const [editor, setEditor] = useState<Editor>(null);
 
-  const [apps, setApps] = usePersistentState<Application[]>(APPS_KEY, sampleApplications);
-  const [selectedName, setSelectedName] = useState<string>(() => apps[0]?.name ?? "");
-  const [category, setCategory] = useState<string>(DEFAULT_CATEGORY);
-
-  const selected = apps.find(a => a.name === selectedName);
-
-  const select = (name: string) => {
-    setSelectedName(name);
-    setCategory(DEFAULT_CATEGORY);
+  const save = (draft: ApplicationDraft) => {
+    const editingId = editor?.applicationId ?? null;
+    setApps(current =>
+      editingId
+        ? current.map(application => (application.id === editingId ? { ...draft, id: editingId } : application))
+        : [...current, { ...draft, id: uid() }],
+    );
+    setEditor(null);
   };
 
-  /** Applies a change to the selected app, based on its latest state. */
-  const patchSelected = (fn: (app: Application) => Partial<Application>) => {
-    if (!selected) return;
-    const name = selected.name;
-    setApps(as => as.map(a => (a.name === name ? { ...a, ...fn(a) } : a)));
-  };
-
-  /** Returns false if the name is empty or already used. */
-  const add = (rawName: string): boolean => {
-    const name = rawName.trim();
-    if (!name || apps.some(a => a.name.toLowerCase() === name.toLowerCase())) return false;
-    setApps(as => [...as, emptyApplication(name)]);
-    select(name);
-    return true;
-  };
-
-  const addStep = (step: string) => {
-    const text = step.trim();
-    if (!text) return;
-    patchSelected(a => ({
-      categories: a.categories.map(c => (c.name === category ? { ...c, steps: [...c.steps, text] } : c)),
-    }));
-  };
-
-  const removeStep = (idx: number) =>
-    patchSelected(a => ({
-      categories: a.categories.map(c =>
-        c.name === category ? { ...c, steps: c.steps.filter((_, i) => i !== idx) } : c,
-      ),
-    }));
-
-  const addSupport = (s: SupportContact) => {
-    if (!s.name.trim()) return;
-    patchSelected(a => ({ support: [...a.support, { name: s.name.trim(), contact: s.contact.trim() }] }));
-  };
-
-  const removeSupport = (idx: number) =>
-    patchSelected(a => ({ support: a.support.filter((_, i) => i !== idx) }));
-
-  const reset = () => {
-    setApps(sampleApplications);
-    select(sampleApplications[0].name);
+  const remove = (applicationId: string) => {
+    if (!confirm("Delete this application? Existing tickets keep their checklists.")) return;
+    setApps(current => current.filter(application => application.id !== applicationId));
   };
 
   return {
-    apps, selected, selectedName, category,
-    setCategory, select, add, addStep, removeStep, addSupport, removeSupport, reset,
+    apps,
+    editor,
+    editingApplication: apps.find(application => application.id === editor?.applicationId),
+    save,
+    remove,
+    addMany: (list: Application[]) => setApps(current => [...current, ...list]),
+    openNew: () => setEditor({ applicationId: null }),
+    openEdit: (applicationId: string) => setEditor({ applicationId }),
+    closeEditor: () => setEditor(null),
   };
 }
 

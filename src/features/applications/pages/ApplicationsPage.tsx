@@ -1,38 +1,58 @@
-import ApplicationDetail from "../components/ApplicationDetail";
-import ApplicationList from "../components/ApplicationList";
-
-import { useCopyToast } from "../hooks/useCopyToast";
+import { Button, Dialog, Hint } from "@/components/ui/index";
+import { ApplicationCard } from "../components/ApplicationCard";
+import { ApplicationForm } from "../components/ApplicationForm";
 import type { ApplicationsStore } from "../hooks/useApplications";
 
-interface Props {
+interface ApplicationsPageProps {
   store: ApplicationsStore;
+  onCopy: (text: string, message: string) => void;
 }
 
-export const ApplicationsPage = ({ store }: Props) => {
-
-  const { toast, copy } = useCopyToast();
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
-      <ApplicationList
-        apps={store.apps}
-        selectedName={store.selectedName}
-        onSelect={store.select}
-        onAdd={store.add}
-      />
-      <ApplicationDetail store={store} onCopy={copy} />
-
-      {toast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-17.5 right-5 rounded-md bg-accent px-3.5 py-2 text-[12.5px] font-semibold text-on-accent"
-        >
-          {toast}
-        </div>
-      )}
+export const ApplicationsPage = ({ 
+  store, 
+  onCopy 
+}: ApplicationsPageProps) => (
+  <main className="mx-auto max-w-7xl px-5 py-4">
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <b>Application library</b>
+        <Hint>Tickets pull their checklist, process, contacts and credential locations from here.</Hint>
+      </div>
+      <Button 
+        variant="primary" 
+        onClick={store.openNew}>
+          Add application
+        </Button>
     </div>
-  );
-}
+
+    {store.apps.length ? (
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3.5">
+        {store.apps.map(application => (
+          <ApplicationCard
+            key={application.id}
+            application={application}
+            onEdit={() => store.openEdit(application.id)}
+            onDelete={() => store.remove(application.id)}
+            onCopy={onCopy}
+          />
+        ))}
+      </div>
+    ) : (
+      <div className="p-7 text-center text-sub">No applications yet.</div>
+    )}
+
+    <Dialog
+      open={store.editor !== null}
+      title={store.editingApplication ? "Edit application" : "Add application"}
+      onClose={store.closeEditor}
+    >
+      <ApplicationForm
+        application={store.editingApplication}
+        onSave={store.save}
+        onCancel={store.closeEditor}
+      />
+    </Dialog>
+  </main>
+);
 
 export default ApplicationsPage;

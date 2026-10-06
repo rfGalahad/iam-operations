@@ -1,53 +1,157 @@
-import { useMemo, useState } from "react";
-import { usePersistentState } from "../../../hooks/usePersistentState";
-import { defaultChecklist, LOG_KEY, TICKETS_KEY } from "../constants";
-import type { LogEntry, NewTicketDraft, StateFilter, Ticket } from "../types";
+import { useState } from "react";
 
-const sampleTickets: Ticket[] = [
-  { id: 1, number: "INC0091234", application: "SAP ECC", category: "Creation", sub: "New Hire", state: "Open", days: 0, pendingReason: "", checklist: defaultChecklist("Creation") },
-  { id: 2, number: "INC0091240", application: "Salesforce", category: "Deactivation", sub: "Termination", state: "Pending", days: 2, pendingReason: "Awaiting IS Approval", checklist: defaultChecklist("Deactivation") },
-  { id: 3, number: "INC0091251", application: "Workday", category: "Creation", sub: "Contractor", state: "Pending", days: 3, pendingReason: "Awaiting user ID from requester", checklist: defaultChecklist("Creation") },
-  { id: 4, number: "INC0091260", application: "AD / Azure", category: "Reactivation", sub: "Return from LOA", state: "Execution", days: 0, pendingReason: "", checklist: defaultChecklist("Reactivation").map(c => ({ ...c, checked: true })) },
-  { id: 5, number: "INC0091277", application: "SAP ECC", category: "Modification", sub: "Role change", state: "Open", days: 0, pendingReason: "", checklist: defaultChecklist("Modification") },
-];
+import { usePersistentState } from "@/hooks/usePersistentState";
 
-export function useTickets() {
-  
-  const [tickets, setTickets] = usePersistentState<Ticket[]>(TICKETS_KEY, sampleTickets);
-  const [log, setLog] = usePersistentState<LogEntry[]>(LOG_KEY, []);
-  const [selId, setSelId] = useState<number | null>(() => tickets[0]?.id ?? null);
-  const [filter, setFilter] = useState<StateFilter>("All");
+import type { ImportRow } from "../importParser";
+import { CATEGORIES, PRIORITIES } from "../constants";
+import { TICKETS_KEY } from "../constants";
+import type { Spiel } from "@/features/spiels/types";
+import type { Application } from "@/features/applications/types";
+import type { Dialog, Filter, NewTicketDraft, Ticket, TicketActions } from "../types";
+import { filterTickets, isActive, makeChecks, today, uid } from "../utils";
+
+interface Options { 
+  notify?: (msg: string) => void; 
+  addApps?: (apps: Application[]) => void 
+}
+
+export const useTickets = (
+  apps: Application[], 
+  spiels: Spiel[], 
+  { 
+    notify = () => {}, 
+    addApps = () => {} 
+  }: Options = {}
+) => {
+
+  const [tickets, setTickets] = usePersistentState<Ticket[]>(TICKETS_KEY, []);
+  const [selId, setSelId] = useState<string | null>(() => tickets[0]?.id ?? null);
+  const [filter, setFilter] = useState<Filter>("Active");
+  const [query, setQuery] = useState("");
+  const [dialog, setDialog] = useState<Dialog>(null);
+
+  const appOf = (id: string) => apps.find(a => a.id === id);
+  const appName = (id: string) => appOf(id)?.name ?? "(deleted app)";
 
   const selected = tickets.find(t => t.id === selId);
-  const visible = filter === "All" ? tickets : tickets.filter(t => t.state === filter);
-  const counts = useMemo(() => {
-    const c = { Open: 0, Pending: 0, Execution: 0 };
-    tickets.forEach(t => { if (t.state in c) c[t.state as keyof typeof c]++; });
-    return c;
-  }, [tickets]);
+  const selectedApp = selected && appOf(selected.appId);
+  const visible = filterTickets(tickets, filter, query, appName);
+  const counts = {
+    open: tickets.filter(t => t.status === "Open").length,
+    pending: tickets.filter(t => t.status === "Pending").length,
+    execution: tickets.filter(t => t.status === "Execution").length,
+  };
+  const subOptions = [...new Set(tickets.map(t => t.sub).filter(Boolean))];
 
-  const update = (id: number, patch: Partial<Ticket>) =>
-    setTickets(ts => ts.map(t => (t.id === id ? { ...t, ...patch } : t)));
+  const patch = (fn: (t: Ticket) => Ticket) => {
+    if (!selId) return;
+    setTickets(ts => ts.map(t => (t.id === selId ? fn(t) : t)));
+  };
 
-  const addLog = (t: Ticket, result: LogEntry["result"], reason = "") =>
-    setLog(l => [{ number: t.number, application: t.application, category: t.category, result, reason, ts: new Date().toLocaleTimeString() }, ...l]);
+  const actions: TicketActions = {
+    addAccounts: list => patch(t => ({ ...t, accts: [...t.accts, ...list] })),
+    update: (key, value) =>
+      patch(t => {
+        const n = { ...t, [key]: value } as Ticket;
+        if (key === "status") {
+          if (isActive(n)) delete n.closed;
+          else { n.closed = today(); n.logged = false; }
+        }
+        return n;
+      }),
+    toggleCheck: i => patch(t => ({ ...t, checks: t.checks.map((c, j) => (j === i ? { ...c, d: !c.done } : c)) })),
+    removeCheck: i => patch(t => ({ ...t, checks: t.checks.filter((_, j) => j !== i) })),
+    addCheck: text => patch(t => ({ ...t, checks: [...t.checks, { text: text, done: false }] })),
+    resetChecklist: () => {
+      if (!selected || !confirm("Reload the checklist from the template? Current ticks will be lost.")) return;
+      patch(t => ({ ...t, checks: makeChecks(appOf(t.appId), t.cat) }));
+    },
+    remove: () => {
+      if (!selected || !confirm("Delete this ticket?")) return;
+      setTickets(ts => ts.filter(t => t.id !== selected.id));
+      setSelId(tickets.find(t => t.id !== selected.id)?.id ?? null);
+    },
+    addAccount: () => patch(t => ({ ...t, accts: [...t.accts, { userId: "", name: "", roles: "", isService: false }] })),
+    updateAccount: (i, key, value) =>
+      patch(t => ({ ...t, accts: t.accts.map((a, j) => (j === i ? { ...a, [key]: value } : a)) })),
+    removeAccount: i => patch(t => ({ ...t, accts: t.accts.filter((_, j) => j !== i) })),
+  };
 
   return {
-    tickets, visible, log, counts, selected, selId, filter,
-    setFilter, select: setSelId,
-    create: (d: NewTicketDraft) => {
-      const id = Date.now();
-      setTickets(ts => [{ id, ...d, state: "Open", days: 0, pendingReason: "", checklist: defaultChecklist(d.category) }, ...ts]);
-      setSelId(id);
+    tickets, 
+    visible, 
+    counts, 
+    selected, 
+    selectedApp, 
+    selId, 
+    filter, 
+    query, 
+    spiels, 
+    subOptions, 
+    dialog,
+    actions, 
+    appName,
+    setFilter, 
+    setQuery, 
+    select: setSelId,
+    apps,
+
+    importTickets: (rows: ImportRow[]) => {
+     const have = new Set(tickets.map(t => t.no));
+     const created = new Map<string, Application>();
+     const next: Ticket[] = [];
+     for (const p of rows) {
+       if (have.has(p.no)) continue;
+       const name = p.app || "(Unassigned)";
+       const key = name.toLowerCase();
+       let app = apps.find(a => a.name.toLowerCase() === key) ?? created.get(key);
+       if (!app) {
+         app = { id: uid(), name, process: "", contacts: [], creds: [], checklist: {}, categories:[] };
+         created.set(key, app);
+       }
+       const cat = CATEGORIES.find(c => c.toLowerCase() === p.cat.toLowerCase()) || p.cat || CATEGORIES[0];
+       const pri = PRIORITIES.find(x => x.toLowerCase() === p.pri.toLowerCase()) || "Medium";
+       next.push({
+         id: uid(), no: p.no, sc: "", sub: p.sub, appId: app.id, cat, sum: `${cat}: ${name}`,
+         req: p.req, status: "Open", pri, pend: "", notes: "", created: today(),
+         accts: [], checks: makeChecks(app, cat),
+       });
+     }
+     if (created.size) addApps([...created.values()]);
+       setTickets(ts => [...next, ...ts]);
+       setFilter("Active");
+       setSelId(next[0]?.id ?? selId);
+       notify(`Imported ${next.length} tickets`);
     },
-    toggleCheck: (idx: number) =>
-      selected && update(selected.id, { checklist: selected.checklist.map((c, i) => (i === idx ? { ...c, checked: !c.checked } : c)) }),
-    moveToExecution: () => selected && update(selected.id, { state: "Execution", pendingReason: "", days: 0 }),
-    setPending: (reason: string) => selected && update(selected.id, { state: "Pending", pendingReason: reason, days: 0 }),
-    resume: () => selected && update(selected.id, { state: "Open" }),
-    cancel: (reason: string) => { if (!selected) return; addLog(selected, "Cancelled", reason); update(selected.id, { state: "Cancelled", pendingReason: reason }); },
-    complete: () => { if (!selected) return; addLog(selected, "Completed"); update(selected.id, { state: "Closed" }); },
-    reset: () => { setTickets(sampleTickets); setLog([]); setSelId(sampleTickets[0].id); },
+
+    create: (d: NewTicketDraft) => {
+      const t: Ticket = {
+        ...d, id: uid(), status: "Open", pend: "", notes: "", created: today(),
+        accts: [], checks: makeChecks(appOf(d.appId), d.cat),
+      };
+      setTickets(ts => [t, ...ts]);
+      setFilter("Active");
+      setQuery("");
+      setSelId(t.id);
+    },
+
+    copy: async (text: string, msg: string) => {
+      try { await navigator.clipboard.writeText(text); notify(msg); }
+      catch { notify("Copy failed"); }
+    },
+
+    markLogged: (ticketIds: string[]) => {
+      const loggedIds = new Set(ticketIds);
+      setTickets(current =>
+        current.map(ticket => (loggedIds.has(ticket.id) ? { ...ticket, logged: true } : ticket)),
+      );
+    },
+
+    openNewForm: () => setDialog({ kind: "new" }),
+    openImport: () => setDialog({ kind: "import" }),
+    openPasteAccounts: () => setDialog({ kind: "paste" }),
+    openSpiel: (id: string) => setDialog({ kind: "spiel", id }),
+    closeDialog: () => setDialog(null),
   };
 }
 

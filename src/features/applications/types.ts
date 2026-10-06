@@ -8,15 +8,20 @@ export interface SupportContact {
   contact: string;
 }
 
-export interface Application {
-  name: string;
-  env: string;
-  url: string;
-  username: string;
-  password: string;
-  notes: string;
-  dos: string[];
-  donts: string[];
-  categories: ProcessCategory[];
-  support: SupportContact[];
+export interface Credential { 
+  label: string; 
+  username: string; 
+  password: string 
 }
+
+export interface Application {
+  id: string;
+  name: string;
+  process: string;
+  contacts: SupportContact[];
+  creds: Credential[];
+  checklist: Record<string, string[]>;
+  categories: ProcessCategory[];
+}
+
+export type ApplicationDraft = Omit<Application, "id">;
